@@ -247,7 +247,7 @@ def fs_mad(x, y):
 
 # ## Define pipeline and Cross validation model fitting
 
-# In[ ]:
+# In[28]:
 
 # Parameter Sweep for Hyperparameters
 param_grid = {
@@ -267,12 +267,12 @@ pipeline = Pipeline(steps=[
 cv_pipeline = GridSearchCV(estimator=pipeline, param_grid=param_grid, n_jobs=-1, cv=folds, scoring='roc_auc')
 
 
-# In[ ]:
+# In[29]:
 
 get_ipython().run_cell_magic('time', '', 'cv_pipeline.fit(X=X_train, y=y_train);')
 
 
-# In[ ]:
+# In[30]:
 
 # Best Params
 print('{:.3%}'.format(cv_pipeline.best_score_))
@@ -283,7 +283,7 @@ cv_pipeline.best_params_
 
 # ## Visualize hyperparameters performance
 
-# In[ ]:
+# In[31]:
 
 cv_result_df = pd.concat([
     pd.DataFrame(cv_pipeline.cv_results_),
@@ -292,7 +292,7 @@ cv_result_df = pd.concat([
 cv_result_df.head(2)
 
 
-# In[ ]:
+# In[32]:
 
 # Cross-validated performance heatmap
 cv_score_mat = pd.pivot_table(cv_result_df, values='mean_test_score', index='classify__l1_ratio', columns='classify__alpha')
@@ -303,7 +303,7 @@ ax.set_ylabel('Elastic net mixing parameter (l1_ratio)');
 
 # ## Use Optimal Hyperparameters to Output ROC Curve
 
-# In[ ]:
+# In[33]:
 
 y_pred_train = cv_pipeline.decision_function(X_train)
 y_pred_test = cv_pipeline.decision_function(X_test)
@@ -319,7 +319,7 @@ metrics_train = get_threshold_metrics(y_train, y_pred_train)
 metrics_test = get_threshold_metrics(y_test, y_pred_test)
 
 
-# In[ ]:
+# In[34]:
 
 # Rerun "cross validation" for the best hyperparameter set to define
 # cross-validation disease-specific performance. Each sample prediction is
@@ -329,7 +329,7 @@ y_cv = cross_val_predict(cv_pipeline.best_estimator_, X=X_train, y=y_train,
 metrics_cv = get_threshold_metrics(y_train, y_cv)
 
 
-# In[ ]:
+# In[35]:
 
 # Plot ROC
 plt.figure()
@@ -347,7 +347,7 @@ plt.legend(loc='lower right');
 
 # ## Tissue specific performance
 
-# In[ ]:
+# In[36]:
 
 tissue_metrics = {}
 for tissue in clinical_sub.disease.unique():
@@ -365,7 +365,7 @@ for tissue in clinical_sub.disease.unique():
     tissue_metrics[tissue] = [metrics_train, metrics_test, metrics_cv_tis]
 
 
-# In[ ]:
+# In[37]:
 
 tissue_auroc = {}
 plt.figure()
@@ -388,13 +388,13 @@ for tissue, metrics_val in tissue_metrics.items():
     plt.show()
 
 
-# In[ ]:
+# In[38]:
 
 tissue_results = pd.DataFrame(tissue_auroc, index=['Train', 'Test', 'Cross Validation']).T
 tissue_results = tissue_results.sort_values('Cross Validation', ascending=False)
 
 
-# In[ ]:
+# In[39]:
 
 ax = tissue_results.plot(kind='bar', title='Tissue Specific Prediction of Hippo Signaling')
 ax.set_ylabel('AUROC');
@@ -404,13 +404,13 @@ ax.set_ylabel('AUROC');
 
 # ## What are the classifier coefficients?
 
-# In[ ]:
+# In[40]:
 
 final_pipeline = cv_pipeline.best_estimator_
 final_classifier = final_pipeline.named_steps['classify']
 
 
-# In[ ]:
+# In[41]:
 
 select_indices = final_pipeline.named_steps['select'].transform(
     np.arange(len(X.columns)).reshape(1, -1)
@@ -425,7 +425,7 @@ coef_df['abs'] = coef_df['weight'].abs()
 coef_df = coef_df.sort_values('abs', ascending=False)
 
 
-# In[ ]:
+# In[42]:
 
 '{:.1%} zero coefficients; {:,} negative and {:,} positive coefficients'.format(
     (coef_df.weight == 0).mean(),
@@ -434,7 +434,7 @@ coef_df = coef_df.sort_values('abs', ascending=False)
 )
 
 
-# In[ ]:
+# In[43]:
 
 coef_df.head(10)
 
@@ -458,7 +458,7 @@ coef_df.head(10)
 
 # ## Investigate the predictions
 
-# In[ ]:
+# In[44]:
 
 predict_df = pd.DataFrame.from_items([
     ('sample_id', X_sub.index),
@@ -470,13 +470,13 @@ predict_df = pd.DataFrame.from_items([
 predict_df['probability_str'] = predict_df['probability'].apply('{:.1%}'.format)
 
 
-# In[ ]:
+# In[45]:
 
 # Top predictions amongst negatives (potential hidden responders)
 predict_df.sort_values('decision_function', ascending=False).query("status == 0").head(10)
 
 
-# In[ ]:
+# In[46]:
 
 # Ignore numpy warning caused by seaborn
 warnings.filterwarnings('ignore', 'using a non-integer number instead of an integer')
@@ -485,7 +485,7 @@ ax = sns.distplot(predict_df.query("status == 0").decision_function, hist=False,
 ax = sns.distplot(predict_df.query("status == 1").decision_function, hist=False, label='Positives')
 
 
-# In[ ]:
+# In[47]:
 
 ax = sns.distplot(predict_df.query("status == 0").probability, hist=False, label='Negatives')
 ax = sns.distplot(predict_df.query("status == 1").probability, hist=False, label='Positives')
