@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn import preprocessing
 from sklearn.linear_model import SGDClassifier
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_predict
 from sklearn.metrics import roc_auc_score, roc_curve
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -87,39 +87,45 @@ classifier_genes_df['entrez_gene_id'] = classifier_genes_df['entrez_gene_id'].as
 
 # In[7]:
 
+# Perform 5 fold cross validation
+folds = 5
+
+
+# In[8]:
+
 # Here are the genes that participate in the Hippo signaling pathway
 classifier_genes_df
 
 
 # ## Load Data
 
-# In[8]:
+# In[9]:
 
 get_ipython().run_cell_magic('time', '', "path = os.path.join('download', 'expression-matrix.tsv.bz2')\nX = pd.read_table(path, index_col=0)")
 
 
-# In[9]:
+# In[10]:
 
 get_ipython().run_cell_magic('time', '', "path = os.path.join('download', 'mutation-matrix.tsv.bz2')\nY = pd.read_table(path, index_col=0)")
 
 
-# In[10]:
+# In[11]:
 
 get_ipython().run_cell_magic('time', '', "path = os.path.join('download', 'samples.tsv')\nclinical = pd.read_table(path, index_col=0)")
 
 
-# In[11]:
+# In[12]:
 
 clinical.tail(5)
 
 
-# In[12]:
+# In[13]:
 
 # Subset the Y matrix to only the genes to be classified
 y_full = Y[classifier_genes_df['entrez_gene_id']]
 
 
-# In[13]:
+# In[14]:
 
 y_full.columns = classifier_genes_df['gene_symbol']
 y_full = y_full.assign(disease = clinical['disease'])
@@ -128,14 +134,14 @@ y_full = y_full.assign(disease = clinical['disease'])
 y = y_full.assign(indicator = y_full.max(axis=1))
 
 
-# In[14]:
+# In[15]:
 
 unique_pos = y.groupby('disease').apply(lambda x: x['indicator'].sum())
 heatmap_df = y_full.groupby('disease').sum().assign(TOTAL = unique_pos)
 heatmap_df = heatmap_df.divide(y_full.disease.value_counts(sort=False).sort_index(), axis=0)
 
 
-# In[15]:
+# In[16]:
 
 # What is the percentage of different mutations across different cancer types?
 sns.heatmap(heatmap_df);
@@ -145,7 +151,7 @@ sns.heatmap(heatmap_df);
 # 
 # Looking closer at the plots above, it is evident that several tissues do not demonstrate aberrations (at least at the mutation level) in Hippo signaling. Specifically, it appears that cancers with gender specificity like testicular cancer and and prostate cancer are _not_ impacted. Therefore, because of this artificial imbalance, if Cognoma were to include these cancers in the classifier, it **will** key in on gender specific signal (i.e. genes that are only on the Y chromosome, or X inactivation genes).  
 
-# In[16]:
+# In[17]:
 
 # How many samples in each tissue that have Hippo signaling aberrations
 ind = ['Negatives', 'Positives', 'Positive Prop']
@@ -160,7 +166,7 @@ tissue_summary_df
 # 
 # This is a crucial step that is different from previous classifiers
 
-# In[17]:
+# In[18]:
 
 # Technically, these are hyper parameters, but for simplicity, set here
 filter_prop = 0.10
@@ -172,26 +178,26 @@ tissue_count_decision = tissue_summary_df['Positives'] >= filter_count
 tissue_decision = tissue_prop_decision & tissue_count_decision
 
 
-# In[18]:
+# In[19]:
 
 # This criteria filters out the following tissues
 pd.Series(tissue_summary_df.index[~tissue_decision].sort_values())
 
 
-# In[19]:
+# In[20]:
 
 # What are the tissues remaining?
 tissue_summary_df = tissue_summary_df[tissue_decision]
 tissue_summary_df
 
 
-# In[20]:
+# In[21]:
 
 # Distribution of mutation counts after filtering
 sns.heatmap(heatmap_df.loc[tissue_decision]);
 
 
-# In[21]:
+# In[22]:
 
 # Subset data
 clinical_sub = clinical[clinical['disease'].isin(tissue_summary_df.index)]
@@ -199,26 +205,26 @@ X_sub = X.ix[clinical_sub.index]
 y_sub = y['indicator'].ix[clinical_sub.index]
 
 
-# In[22]:
+# In[23]:
 
 # Total distribution of positives/negatives
 y_sub.value_counts(True)
 
 
-# In[23]:
+# In[24]:
 
 y_sub.head(7)
 
 
 # ## Set aside 10% of the data for testing
 
-# In[24]:
+# In[25]:
 
 strat = clinical_sub['disease'].str.cat(y_sub.astype(str))
 strat.head(6)
 
 
-# In[25]:
+# In[26]:
 
 # Make sure the splits have equal tissue and label partitions
 X_train, X_test, y_train, y_test = train_test_split(X_sub, y_sub, test_size=0.1, random_state=0,
@@ -229,7 +235,7 @@ X_train, X_test, y_train, y_test = train_test_split(X_sub, y_sub, test_size=0.1,
 
 # ## Median absolute deviation feature selection
 
-# In[26]:
+# In[27]:
 
 def fs_mad(x, y):
     """    
@@ -241,7 +247,7 @@ def fs_mad(x, y):
 
 # ## Define pipeline and Cross validation model fitting
 
-# In[27]:
+# In[ ]:
 
 # Parameter Sweep for Hyperparameters
 param_grid = {
@@ -258,15 +264,15 @@ pipeline = Pipeline(steps=[
     ('classify', SGDClassifier(random_state=0, class_weight='balanced'))
 ])
 
-cv_pipeline = GridSearchCV(estimator=pipeline, param_grid=param_grid, n_jobs=-1, scoring='roc_auc')
+cv_pipeline = GridSearchCV(estimator=pipeline, param_grid=param_grid, n_jobs=-1, cv=folds, scoring='roc_auc')
 
 
-# In[28]:
+# In[ ]:
 
 get_ipython().run_cell_magic('time', '', 'cv_pipeline.fit(X=X_train, y=y_train);')
 
 
-# In[29]:
+# In[ ]:
 
 # Best Params
 print('{:.3%}'.format(cv_pipeline.best_score_))
@@ -277,7 +283,7 @@ cv_pipeline.best_params_
 
 # ## Visualize hyperparameters performance
 
-# In[30]:
+# In[ ]:
 
 cv_result_df = pd.concat([
     pd.DataFrame(cv_pipeline.cv_results_),
@@ -286,7 +292,7 @@ cv_result_df = pd.concat([
 cv_result_df.head(2)
 
 
-# In[31]:
+# In[ ]:
 
 # Cross-validated performance heatmap
 cv_score_mat = pd.pivot_table(cv_result_df, values='mean_test_score', index='classify__l1_ratio', columns='classify__alpha')
@@ -297,7 +303,7 @@ ax.set_ylabel('Elastic net mixing parameter (l1_ratio)');
 
 # ## Use Optimal Hyperparameters to Output ROC Curve
 
-# In[32]:
+# In[ ]:
 
 y_pred_train = cv_pipeline.decision_function(X_train)
 y_pred_test = cv_pipeline.decision_function(X_test)
@@ -313,11 +319,21 @@ metrics_train = get_threshold_metrics(y_train, y_pred_train)
 metrics_test = get_threshold_metrics(y_test, y_pred_test)
 
 
-# In[33]:
+# In[ ]:
+
+# Rerun "cross validation" for the best hyperparameter set to define
+# cross-validation disease-specific performance. Each sample prediction is
+# based on the fold that the sample was in the testing partition
+y_cv = cross_val_predict(cv_pipeline.best_estimator_, X=X_train, y=y_train,
+                         cv=folds, method='decision_function')
+metrics_cv = get_threshold_metrics(y_train, y_cv)
+
+
+# In[ ]:
 
 # Plot ROC
 plt.figure()
-for label, metrics in ('Training', metrics_train), ('Testing', metrics_test):
+for label, metrics in ('Training', metrics_train), ('Testing', metrics_test), ('Cross Validation', metrics_cv):
     roc_df = metrics['roc_df']
     plt.plot(roc_df.fpr, roc_df.tpr,
         label='{} (AUROC = {:.1%})'.format(label, metrics['auroc']))
@@ -331,7 +347,7 @@ plt.legend(loc='lower right');
 
 # ## Tissue specific performance
 
-# In[34]:
+# In[ ]:
 
 tissue_metrics = {}
 for tissue in clinical_sub.disease.unique():
@@ -341,22 +357,23 @@ for tissue in clinical_sub.disease.unique():
     y_tissue_pred_train = y_pred_train[y_train.index.isin(sample_sub)]
     y_tissue_test = y_test[y_test.index.isin(sample_sub)]
     y_tissue_pred_test = y_pred_test[y_test.index.isin(sample_sub)]
+    y_tissue_pred_cv = y_cv[y_train.index.isin(sample_sub)]
 
     metrics_train = get_threshold_metrics(y_tissue_train, y_tissue_pred_train, tissue=tissue)
     metrics_test = get_threshold_metrics(y_tissue_test, y_tissue_pred_test, tissue=tissue) 
-    
-    tissue_metrics[tissue] = [metrics_train, metrics_test]
+    metrics_cv_tis = get_threshold_metrics(y_tissue_train, y_tissue_pred_cv, tissue=tissue)
+    tissue_metrics[tissue] = [metrics_train, metrics_test, metrics_cv_tis]
 
 
-# In[35]:
+# In[ ]:
 
 tissue_auroc = {}
 plt.figure()
 for tissue, metrics_val in tissue_metrics.items():
-    metrics_train, metrics_test = metrics_val
+    metrics_train, metrics_test, met_cv = metrics_val
     plt.subplot()
     auroc = []
-    for label, metrics in ('Training', metrics_train), ('Testing', metrics_test):
+    for label, metrics in ('Training', metrics_train), ('Testing', metrics_test), ('Cross Validation', met_cv):
         roc_df = metrics['roc_df']
         auroc.append(metrics['auroc'])
         plt.plot(roc_df.fpr, roc_df.tpr,
@@ -371,13 +388,13 @@ for tissue, metrics_val in tissue_metrics.items():
     plt.show()
 
 
-# In[36]:
+# In[ ]:
 
-tissue_results = pd.DataFrame(tissue_auroc, index=['Train', 'Test']).T
-tissue_results = tissue_results.sort_values('Test', ascending=False)
+tissue_results = pd.DataFrame(tissue_auroc, index=['Train', 'Test', 'Cross Validation']).T
+tissue_results = tissue_results.sort_values('Cross Validation', ascending=False)
 
 
-# In[37]:
+# In[ ]:
 
 ax = tissue_results.plot(kind='bar', title='Tissue Specific Prediction of Hippo Signaling')
 ax.set_ylabel('AUROC');
@@ -387,13 +404,13 @@ ax.set_ylabel('AUROC');
 
 # ## What are the classifier coefficients?
 
-# In[38]:
+# In[ ]:
 
 final_pipeline = cv_pipeline.best_estimator_
 final_classifier = final_pipeline.named_steps['classify']
 
 
-# In[39]:
+# In[ ]:
 
 select_indices = final_pipeline.named_steps['select'].transform(
     np.arange(len(X.columns)).reshape(1, -1)
@@ -408,7 +425,7 @@ coef_df['abs'] = coef_df['weight'].abs()
 coef_df = coef_df.sort_values('abs', ascending=False)
 
 
-# In[40]:
+# In[ ]:
 
 '{:.1%} zero coefficients; {:,} negative and {:,} positive coefficients'.format(
     (coef_df.weight == 0).mean(),
@@ -417,7 +434,7 @@ coef_df = coef_df.sort_values('abs', ascending=False)
 )
 
 
-# In[41]:
+# In[ ]:
 
 coef_df.head(10)
 
@@ -441,7 +458,7 @@ coef_df.head(10)
 
 # ## Investigate the predictions
 
-# In[42]:
+# In[ ]:
 
 predict_df = pd.DataFrame.from_items([
     ('sample_id', X_sub.index),
@@ -453,13 +470,13 @@ predict_df = pd.DataFrame.from_items([
 predict_df['probability_str'] = predict_df['probability'].apply('{:.1%}'.format)
 
 
-# In[43]:
+# In[ ]:
 
 # Top predictions amongst negatives (potential hidden responders)
 predict_df.sort_values('decision_function', ascending=False).query("status == 0").head(10)
 
 
-# In[44]:
+# In[ ]:
 
 # Ignore numpy warning caused by seaborn
 warnings.filterwarnings('ignore', 'using a non-integer number instead of an integer')
@@ -468,7 +485,7 @@ ax = sns.distplot(predict_df.query("status == 0").decision_function, hist=False,
 ax = sns.distplot(predict_df.query("status == 1").decision_function, hist=False, label='Positives')
 
 
-# In[45]:
+# In[ ]:
 
 ax = sns.distplot(predict_df.query("status == 0").probability, hist=False, label='Negatives')
 ax = sns.distplot(predict_df.query("status == 1").probability, hist=False, label='Positives')
